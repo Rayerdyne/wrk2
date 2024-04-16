@@ -225,10 +225,11 @@
       wrk.format returns a HTTP request string containing the passed
       parameters merged with values from the wrk table.
 
-    global init     -- function called when the thread is initialized
-    global request  -- function returning the HTTP message for each request
-    global response -- optional function called with HTTP response data
-    global done     -- optional function called with results of run
+    global init           -- function called when the thread is initialized
+    global request        -- function returning the HTTP message for each request
+    global response       -- optional function called with HTTP response data
+    global record_latency -- optional function called with latency records
+    global done           -- optional function called with results of run
 
   The init() function receives any extra command line arguments for the
   script. Script arguments must be separated from wrk arguments with "--"

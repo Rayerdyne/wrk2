@@ -190,12 +190,24 @@ bool script_want_response(lua_State *L) {
     return script_is_function(L, "response");
 }
 
+bool script_has_record_latency(lua_State *L) {
+    return script_is_function(L, "record_latency");
+}
+
 bool script_has_done(lua_State *L) {
     return script_is_function(L, "done");
 }
 
 void script_header_done(lua_State *L, luaL_Buffer *buffer) {
     luaL_pushresult(buffer);
+}
+
+void script_record_latency(lua_State *L, uint64_t now, uint64_t latency, uint64_t u_latency) {
+    lua_getglobal(L, "record_latency");
+    lua_pushinteger(L, (lua_Integer) now);
+    lua_pushinteger(L, (lua_Integer) latency);
+    lua_pushinteger(L, (lua_Integer) u_latency);
+    lua_call(L, 3, 0);
 }
 
 void script_summary(lua_State *L, uint64_t duration, uint64_t requests, uint64_t bytes) {

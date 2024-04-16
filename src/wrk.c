@@ -21,6 +21,7 @@ static struct config {
     bool     u_latency;
     bool     dynamic;
     bool     record_all_responses;
+    bool     has_record_latency;
     char    *host;
     char    *script;
     SSL_CTX *ctx;
@@ -141,6 +142,11 @@ int main(int argc, char **argv) {
                 parser_settings.on_header_field = header_field;
                 parser_settings.on_header_value = header_value;
                 parser_settings.on_body         = response_body;
+            }
+            cfg.has_record_latency = script_has_record_latency(t->L);
+            if (cfg.has_record_latency && !cfg.record_all_responses) {
+                fprintf(stderr, "cannot record latencies when not recording all responses\n");
+                exit(1);
             }
         }
 
@@ -556,6 +562,10 @@ static int response_complete(http_parser *parser) {
 
         uint64_t actual_latency_timing = now - c->actual_latency_start;
         hdr_record_value(thread->u_latency_histogram, actual_latency_timing);
+
+        if (cfg.has_record_latency) {
+            script_record_latency(thread->L, now, expected_latency_timing, actual_latency_timing);
+        }
     }
 
 

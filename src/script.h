@@ -17,11 +17,13 @@ void script_done(lua_State *, stats *, stats *);
 
 void script_init(lua_State *, thread *, int, char **);
 void script_request(lua_State *, char **, size_t *);
+void script_record_latency(lua_State *, uint64_t, uint64_t, uint64_t);
 void script_response(lua_State *, int, buffer *, buffer *);
 size_t script_verify_request(lua_State *L);
 
 bool script_is_static(lua_State *);
 bool script_want_response(lua_State *L);
+bool script_has_record_latency(lua_State *L);
 bool script_has_done(lua_State *L);
 void script_summary(lua_State *, uint64_t, uint64_t, uint64_t);
 void script_errors(lua_State *, errors *);

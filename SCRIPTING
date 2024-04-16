@@ -36,11 +36,12 @@ Overview
 
   The following globals are optional, and if defined must be functions:
 
-    global setup    -- called during thread setup
-    global init     -- called when the thread is starting
-    global request  -- called to generate the HTTP request
-    global response -- called with HTTP response data
-    global done     -- called with results of run
+    global setup          -- called during thread setup
+    global init           -- called when the thread is starting
+    global request        -- called to generate the HTTP request
+    global response       -- called with HTTP response data
+    global record_latency -- called with latency record data
+    global done           -- called with results of run
 
 Setup
 
@@ -66,6 +67,7 @@ Running
   function init(args)
   function request()
   function response(status, headers, body)
+  function latency_record(time, actual_latency, expected_latency)
 
   The running phase begins with a single call to init(), followed by
   a call to request() and response() for each request cycle.
@@ -81,6 +83,9 @@ Running
   response() is called with the HTTP response status, headers, and body.
   Parsing the headers and body is expensive, so if the response global is
   nil after the call to init() wrk will ignore the headers and body.
+
+  latency_record() is called with the time at which the latency measure is
+  received, the latency and the uncorrected latency values in ms.
 
 Done
 

@@ -22,6 +22,7 @@ static struct config {
     bool     dynamic;
     bool     record_all_responses;
     bool     has_record_latency;
+    bool     suppress_output;
     char    *host;
     char    *script;
     SSL_CTX *ctx;
@@ -65,6 +66,7 @@ static void usage() {
            "    -B, --batch_latency    Measure latency of whole   \n"
            "                           batches of pipelined ops   \n"
            "                           (as opposed to each op)    \n"
+           "    -q, --quiet            Inhibit the usual stdout   \n"
            "    -v, --version          Print version details      \n"
            "    -R, --rate        <T>  work rate (throughput)     \n"
            "                           in requests/sec (total)    \n"
@@ -164,10 +166,12 @@ int main(int argc, char **argv) {
     sigfillset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
 
-    char *time = format_time_s(cfg.duration);
-    printf("Running %s test @ %s\n", time, url);
-    printf("  %"PRIu64" threads and %"PRIu64" connections\n",
-            cfg.threads, cfg.connections);
+    if (!cfg.suppress_output) {
+        char *time = format_time_s(cfg.duration);
+        printf("Running %s test @ %s\n", time, url);
+        printf("  %"PRIu64" threads and %"PRIu64" connections\n",
+                cfg.threads, cfg.connections);
+    }
 
     uint64_t start    = time_us();
     uint64_t complete = 0;
@@ -210,39 +214,41 @@ int main(int argc, char **argv) {
     latency_stats->max = hdr_max(latency_histogram);
     latency_stats->histogram = latency_histogram;
 
-    print_stats_header();
-    print_stats("Latency", latency_stats, format_time_us);
-    print_stats("Req/Sec", statistics.requests, format_metric);
-//    if (cfg.latency) print_stats_latency(latency_stats);
+    if (!cfg.suppress_output) {
+        print_stats_header();
+        print_stats("Latency", latency_stats, format_time_us);
+        print_stats("Req/Sec", statistics.requests, format_metric);
+        //    if (cfg.latency) print_stats_latency(latency_stats);
 
-    if (cfg.latency) {
-        print_hdr_latency(latency_histogram,
-                "Recorded Latency");
-        printf("----------------------------------------------------------\n");
+        if (cfg.latency) {
+            print_hdr_latency(latency_histogram,
+                    "Recorded Latency");
+            printf("----------------------------------------------------------\n");
+        }
+
+        if (cfg.u_latency) {
+            printf("\n");
+            print_hdr_latency(u_latency_histogram,
+                    "Uncorrected Latency (measured without taking delayed starts into account)");
+            printf("----------------------------------------------------------\n");
+        }
+
+        char *runtime_msg = format_time_us(runtime_us);
+
+        printf("  %"PRIu64" requests in %s, %sB read\n",
+                complete, runtime_msg, format_binary(bytes));
+        if (errors.connect || errors.read || errors.write || errors.timeout) {
+            printf("  Socket errors: connect %d, read %d, write %d, timeout %d\n",
+                errors.connect, errors.read, errors.write, errors.timeout);
+        }
+
+        if (errors.status) {
+            printf("  Non-2xx or 3xx responses: %d\n", errors.status);
+        }
+
+        printf("Requests/sec: %9.2Lf\n", req_per_s);
+        printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
     }
-
-    if (cfg.u_latency) {
-        printf("\n");
-        print_hdr_latency(u_latency_histogram,
-                "Uncorrected Latency (measured without taking delayed starts into account)");
-        printf("----------------------------------------------------------\n");
-    }
-
-    char *runtime_msg = format_time_us(runtime_us);
-
-    printf("  %"PRIu64" requests in %s, %sB read\n",
-            complete, runtime_msg, format_binary(bytes));
-    if (errors.connect || errors.read || errors.write || errors.timeout) {
-        printf("  Socket errors: connect %d, read %d, write %d, timeout %d\n",
-               errors.connect, errors.read, errors.write, errors.timeout);
-    }
-
-    if (errors.status) {
-        printf("  Non-2xx or 3xx responses: %d\n", errors.status);
-    }
-
-    printf("Requests/sec: %9.2Lf\n", req_per_s);
-    printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
 
     if (script_has_done(L)) {
         script_summary(L, runtime_us, complete, bytes);
@@ -365,9 +371,11 @@ static int calibrate(aeEventLoop *loop, long long id, void *data) {
     thread->interval = interval;
     thread->requests = 0;
 
-    printf("  Thread calibration: mean lat.: %.3fms, rate sampling interval: %dms\n",
-            (thread->mean)/1000.0,
-            thread->interval);
+    if (!cfg.suppress_output) {
+        printf("  Thread calibration: mean lat.: %.3fms, rate sampling interval: %dms\n",
+                (thread->mean)/1000.0,
+                thread->interval);
+    }
 
     aeCreateTimeEvent(loop, thread->interval, sample_rate, thread, NULL);
 
@@ -714,6 +722,8 @@ static struct option longopts[] = {
     { "help",           no_argument,       NULL, 'h' },
     { "version",        no_argument,       NULL, 'v' },
     { "rate",           required_argument, NULL, 'R' },
+    { "quiet",          no_argument,       NULL, 'q' },
+    { "silent",         no_argument,       NULL, 'q' },
     { NULL,             0,                 NULL,  0  }
 };
 
@@ -727,8 +737,9 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->timeout     = SOCKET_TIMEOUT_MS;
     cfg->rate        = 0;
     cfg->record_all_responses = true;
+    cfg->suppress_output      = false;
 
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:R:LUBrv?", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:R:LUBrvq?", longopts, NULL)) != -1) {
         switch (c) {
             case 't':
                 if (scan_metric(optarg, &cfg->threads)) return -1;
@@ -765,6 +776,9 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
             case 'v':
                 printf("wrk %s [%s] ", VERSION, aeGetApiName());
                 printf("Copyright (C) 2012 Will Glozer\n");
+                break;
+            case 'q':
+                cfg->suppress_output = true;
                 break;
             case 'h':
             case '?':
